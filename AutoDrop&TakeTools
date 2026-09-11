@@ -46,32 +46,22 @@ local autoDropEnabled = false
 -- Функция проверки имени (ищем гранаты и молотовы)
 local function matchesTarget(name)
 	local lowerName = string.lower(name)
-	if string.find(lowerName, "granade") or string.find(lowerName, "grenade") or string.find(lowerName, "stun") or string.find(lowerName, "molotov") then
+	if string.find(lowerName, "granade") or string.find(lowerName, "grenade") or string.find(lowerName, "molotov") then
 		return true
 	end
 	return false
 end
 
--- Функция переключения на первый слот (оружие)
-local function equipFirstTool()
+-- Функция честного нажатия на клавишу "1" для выбора первого слота
+local function pressKeyOne()
 	task.defer(function()
-		local humanoid = character:FindFirstChildOfClass("Humanoid")
-		if not humanoid then return end
-		
-		local backpack = player:FindFirstChild("Backpack")
-		if not backpack then return end
-		
-		local tools = backpack:GetChildren()
-		for _, tool in ipairs(tools) do
-			if tool:IsA("Tool") and not matchesTarget(tool.Name) then
-				humanoid:EquipTool(tool)
-				break
-			end
-		end
+		VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.One, false, game)
+		task.wait(0.01)
+		VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.One, false, game)
 	end)
 end
 
--- Функция имитации нажатия Backspace для честного выброса предмета из рук
+-- Функция имитации нажатия Backspace для выброса предмета из рук
 local function pressBackspaceToDrop(tool)
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
 	if not humanoid then return end
@@ -128,9 +118,9 @@ RunService.Heartbeat:Connect(function()
 		end
 	end
 	
-	-- Если что-то скинули, сразу переключаем на оружие
+	-- Если что-то скинули, нажимаем клавишу "1"
 	if foundAnything then
-		equipFirstTool()
+		pressKeyOne()
 	end
 end)
 
