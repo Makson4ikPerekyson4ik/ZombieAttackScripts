@@ -20,35 +20,35 @@ screenGui.Parent = player:WaitForChild("PlayerGui")
 -- Кнопка 1: Переключатель авто-выброса (Auto-Drop)
 local autoDropButton = Instance.new("TextButton")
 autoDropButton.Name = "AutoDropButton"
-autoDropButton.Size = UDim2.new(0, 200, 0, 40)
+autoDropButton.Size = UDim2.new(0, 200, 0, 50)
 autoDropButton.Position = UDim2.new(0, 50, 0, 50)
 autoDropButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
 autoDropButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-autoDropButton.TextSize = 14
+autoDropButton.TextSize = 16
 autoDropButton.Font = Enum.Font.SourceSansBold
-autoDropButton.Text = "Auto-Drop Granade: OFF"
+autoDropButton.Text = "Auto-Drop Granade/Molotov: OFF"
 autoDropButton.Parent = screenGui
 
 -- Кнопка 2: Grab All
 local grabAllButton = Instance.new("TextButton")
 grabAllButton.Name = "GrabAllButton"
-grabAllButton.Size = UDim2.new(0, 200, 0, 40)
-grabAllButton.Position = UDim2.new(0, 50, 0, 100)
+grabAllButton.Size = UDim2.new(0, 200, 0, 50)
+grabAllButton.Position = UDim2.new(0, 50, 0, 110)
 grabAllButton.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
 grabAllButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-grabAllButton.TextSize = 14
+grabAllButton.TextSize = 16
 grabAllButton.Font = Enum.Font.SourceSansBold
-grabAllButton.Text = "Grab All Granade"
+grabAllButton.Text = "Grab All Granade/Molotov"
 grabAllButton.Parent = screenGui
 
 -- Кнопка 3: Auto Equip Slot 1
 local autoEquipButton = Instance.new("TextButton")
 autoEquipButton.Name = "AutoEquipButton"
-autoEquipButton.Size = UDim2.new(0, 200, 0, 40)
-autoEquipButton.Position = UDim2.new(0, 50, 0, 150)
+autoEquipButton.Size = UDim2.new(0, 200, 0, 50)
+autoEquipButton.Position = UDim2.new(0, 50, 0, 170)
 autoEquipButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
 autoEquipButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-autoEquipButton.TextSize = 14
+autoEquipButton.TextSize = 16
 autoEquipButton.Font = Enum.Font.SourceSansBold
 autoEquipButton.Text = "Auto Equip Slot 1: OFF"
 autoEquipButton.Parent = screenGui
@@ -56,7 +56,7 @@ autoEquipButton.Parent = screenGui
 local autoDropEnabled = false
 local autoEquipEnabled = false
 
--- Функция проверки имени (ищем гранаты и молотовы)
+-- Функция проверки имени (ищем гранаты и молотовы — их НЕ трогаем)
 local function matchesTarget(name)
 	local lowerName = string.lower(name)
 	if string.find(lowerName, "granade") or string.find(lowerName, "grenade") or string.find(lowerName, "molotov") then
@@ -65,20 +65,35 @@ local function matchesTarget(name)
 	return false
 end
 
--- Функция проверки на 3 слот (если захочешь прописать название аптечки/хила)
-local function isSlot3(name)
+-- Проверка: является ли предмет оружием 1-го слота (по твоему полному списку)
+local function isSlot1Weapon(name)
 	local lower = string.lower(name)
-	if string.find(lower, "med") or string.find(lower, "heal") or string.find(lower, "kit") or string.find(lower, "аптеч") then
-		return true
+	local weapons = {
+		"pistol", "revolver", "uzi", "trench shotgun", "m1 garand", "type 100", 
+		"thompson", "sniper", "tactical shotgun", "m16", "scope rifle", "machine gun", 
+		"cobra", "blaster", "platinum gun", "toxic", "biohazard", "venom", "ghost", 
+		"annihilator", "railgun", "ray gun", "space gun", "viper strike", "alien blaster", 
+		"alien rifle", "rainbow blaster", "hex spitter", "beam launcher", "gatling laser", 
+		"tri laser", "techno rifle", "minigun", "flamethrower", "rocket launcher", 
+		"golden pistol", "golden rifle", "retribution ray", "candy cane minigun", 
+		"pumpkin blaster", "halloween staff", "tree launcher", "fiery cannon", "invader crossbow"
+	}
+	
+	for _, w in ipairs(weapons) do
+		if string.find(lower, w) then
+			return true
+		end
 	end
 	return false
 end
 
--- Функция честного нажатия на клавишу "1"
+-- Функция честного нажатия на клавишу "1" для выбора первого слота
 local function pressKeyOne()
-	VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.One, false, game)
-	task.wait(0.01)
-	VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.One, false, game)
+	task.defer(function()
+		VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.One, false, game)
+		task.wait(0.01)
+		VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.One, false, game)
+	end)
 end
 
 -- Функция имитации нажатия Backspace для выброса предмета из рук
@@ -88,14 +103,14 @@ local function pressBackspaceToDrop(tool)
 	
 	if tool.Parent ~= character then
 		humanoid:EquipTool(tool)
-		task.wait(0.03)
+		task.wait(0.1)
 	end
 	
 	if tool.Parent == character then
 		VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Backspace, false, game)
-		task.wait(0.01)
+		task.wait(0.02)
 		VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Backspace, false, game)
-		task.wait(0.03)
+		task.wait(0.1)
 	end
 end
 
@@ -104,10 +119,10 @@ autoDropButton.MouseButton1Click:Connect(function()
 	autoDropEnabled = not autoDropEnabled
 	if autoDropEnabled then
 		autoDropButton.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
-		autoDropButton.Text = "Auto-Drop Granade: ON"
+		autoDropButton.Text = "Auto-Drop Granade/Molotov: ON"
 	else
 		autoDropButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-		autoDropButton.Text = "Auto-Drop Granade: OFF"
+		autoDropButton.Text = "Auto-Drop Granade/Molotov: OFF"
 	end
 end)
 
@@ -122,51 +137,54 @@ autoEquipButton.MouseButton1Click:Connect(function()
 	end
 end)
 
--- Основной мониторинг через Heartbeat
-RunService.Heartbeat:Connect(function()
-	local backpack = player:FindFirstChild("Backpack")
-	if not backpack then return end
-	
-	-- 1. Логика авто-выброса гранат/молотовов
-	if autoDropEnabled then
-		local foundAnything = false
+-- Плавный цикл проверки
+task.spawn(function()
+	while true do
+		task.wait(0.2)
 		
-		for _, item in ipairs(character:GetChildren()) do
-			if item:IsA("Tool") and matchesTarget(item.Name) then
-				pressBackspaceToDrop(item)
-				foundAnything = true
+		local backpack = player:FindFirstChild("Backpack")
+		if backpack then
+			-- 1. Логика Auto-Drop (работает только если включено)
+			if autoDropEnabled then
+				local foundAnything = false
+				
+				for _, item in ipairs(character:GetChildren()) do
+					if item:IsA("Tool") and matchesTarget(item.Name) then
+						pressBackspaceToDrop(item)
+						foundAnything = true
+					end
+				end
+				
+				for _, item in ipairs(backpack:GetChildren()) do
+					if item:IsA("Tool") and matchesTarget(item.Name) then
+						pressBackspaceToDrop(item)
+						foundAnything = true
+					end
+				end
+				
+				if foundAnything then
+					pressKeyOne()
+				end
 			end
-		end
-		
-		for _, item in ipairs(backpack:GetChildren()) do
-			if item:IsA("Tool") and matchesTarget(item.Name) then
-				pressBackspaceToDrop(item)
-				foundAnything = true
-			end
-		end
-		
-		if foundAnything then
-			pressKeyOne()
-		end
-	end
-	
-	-- 2. Логика возврата на 1 слот
-	if autoEquipEnabled then
-		local currentTool = nil
-		for _, item in ipairs(character:GetChildren()) do
-			if item:IsA("Tool") then
-				currentTool = item
-				break
-			end
-		end
-		
-		if currentTool then
-			local name = currentTool.Name
-			-- Если в руках НЕ граната и НЕ 3-й слот (значит, это меч или другое оружие со 2-го слота) — сразу жмем 1
-			if not matchesTarget(name) and not isSlot3(name) then
-				-- Проверяем, не первое ли это оружие (например, "Golden Pistol" с первой картинки у тебя на 1 слоте, его трогать не нужно)
-				local lower = string.lower(name)
-				if not string.find(lower, "pistol") and not string.find(lower, "gun") and not string.find(lower, "rifle") then
+			
+			-- 2. Логика Auto Equip Slot 1 (работает ТОЛЬКО если кнопка включена в ON)
+			if autoEquipEnabled then
+				local currentTool = nil
+				for _, item in ipairs(character:GetChildren()) do
+					if item:IsA("Tool") then
+						currentTool = item
+						break
+					end
+				end
+				
+				if currentTool then
+					local name = currentTool.Name
+					-- Если в руках НЕ граната и НЕ оружие из 1 слота (например, взял меч/2 слот) — жмем 1
+					if not matchesTarget(name) and not isSlot1Weapon(name) then
+						pressKeyOne()
+					end
+				else
+					-- Если вообще пусто в руках — нажимаем 1
 					pressKeyOne()
 				end
 			end
