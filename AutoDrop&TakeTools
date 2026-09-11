@@ -1,0 +1,187 @@
+-- Services
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+
+player.CharacterAdded:Connect(function(newChar)
+	character = newChar
+end)
+
+-- Создание графического интерфейса (GUI)
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "ZombieAttackHelperGui"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = player:WaitForChild("PlayerGui")
+
+-- Кнопка 1: Переключатель авто-выброса (Auto-Drop)
+local autoDropButton = Instance.new("TextButton")
+autoDropButton.Name = "AutoDropButton"
+autoDropButton.Size = UDim2.new(0, 200, 0, 50)
+autoDropButton.Position = UDim2.new(0, 50, 0, 50)
+autoDropButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+autoDropButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+autoDropButton.TextSize = 16
+autoDropButton.Font = Enum.Font.SourceSansBold
+autoDropButton.Text = "Auto-Drop Granade/Molotov: OFF"
+autoDropButton.Parent = screenGui
+
+-- Кнопка 2: Grab All
+local grabAllButton = Instance.new("TextButton")
+grabAllButton.Name = "GrabAllButton"
+grabAllButton.Size = UDim2.new(0, 200, 0, 50)
+grabAllButton.Position = UDim2.new(0, 50, 0, 110)
+grabAllButton.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
+grabAllButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+grabAllButton.TextSize = 16
+grabAllButton.Font = Enum.Font.SourceSansBold
+grabAllButton.Text = "Grab All Granade/Molotov"
+grabAllButton.Parent = screenGui
+
+local autoDropEnabled = false
+local isCleaning = false
+
+-- Функция проверки имени (ищем гранаты и молотовы)
+local function matchesTarget(name)
+	local lowerName = string.lower(name)
+	if string.find(lowerName, "granade") or string.find(lowerName, "grenade") or string.find(lowerName, "molotov") then
+		return true
+	end
+	return false
+end
+
+-- Функция переключения на первый слот (оружие) в самом конце
+local function equipFirstTool()
+	task.defer(function()
+		local humanoid = character:FindFirstChildOfClass("Humanoid")
+		if not humanoid then return end
+		
+		local backpack = player:FindFirstChild("Backpack")
+		if not backpack then return end
+		
+		local tools = backpack:GetChildren()
+		for _, tool in ipairs(tools) do
+			if tool:IsA("Tool") and not matchesTarget(tool.Name) then
+				humanoid:EquipTool(tool)
+				break
+			end
+		end
+	end)
+end
+
+-- Функция очистки инвентаря
+local function processInventoryCleaning()
+	if isCleaning or not autoDropEnabled then return end
+	isCleaning = true
+	
+	task.spawn(function()
+		local backpack = player:FindFirstChild("Backpack")
+		local humanoid = character:FindFirstChildOfClass("Humanoid")
+		local hrp = character:FindFirstChild("HumanoidRootPart")
+		
+		if not backpack or not humanoid or not hrp then
+			isCleaning = false
+			return
+		end
+		
+		-- Выбрасываем всё по очереди, пока не закончатся целевые предметы
+		while autoDropEnabled do
+			local foundTool = nil
+			
+			-- Сначала ищем в руках персонажа
+			for _, item in ipairs(character:GetChildren()) do
+				if item:IsA("Tool") and matchesTarget(item.Name) then
+					foundTool = item
+					break
+				end
+			end
+			
+			-- Если в руках нет, ищем в рюкзаке
+			if not foundTool then
+				for _, item in ipairs(backpack:GetChildren()) do
+					if item:IsA("Tool") and matchesTarget(item.Name) then
+						foundTool = item
+						break
+					end
+				end
+			end
+			
+			-- Если ничего не нашли, значит всё выброшено — выходим из цикла
+			if not foundTool then
+				break
+			end
+			
+			-- Убираем из рук в рюкзак, чтобы не было рывков камеры
+			if foundTool.Parent == character then
+				humanoid:UnequipTools()
+				task.wait(0.02)
+			end
+			
+			-- Передвигаем Handle и выкидываем в Workspace
+			local handle = foundTool:FindFirstChild("Handle")
+			if handle then
+				handle.CFrame = hrp.CFrame + (hrp.CFrame.LookVector * 3) + Vector3.new(0, 0.5, 0)
+			end
+			foundTool.Parent = Workspace
+			
+			task.wait(0.03)
+		end
+		
+		-- ВСЁ ВЫБРОШЕНО! Теперь ровно один раз переключаемся на 1-й слот (оружие)
+		equipFirstTool()
+		isCleaning = false
+	end)
+end
+
+-- Переключатель кнопки Auto-Drop
+autoDropButton.MouseButton1Click:Connect(function()
+	autoDropEnabled = not autoDropEnabled
+	if autoDropEnabled then
+		autoDropButton.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
+		autoDropButton.Text = "Auto-Drop Granade/Molotov: ON"
+		processInventoryCleaning()
+	else
+		autoDropButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+		autoDropButton.Text = "Auto-Drop Granade/Molotov: OFF"
+	end
+end)
+
+-- Отслеживание новых предметов в рюкзаке
+local function setupBackpackListener(backpack)
+	backpack.ChildAdded:Connect(function(child)
+		if autoDropEnabled and child:IsA("Tool") and matchesTarget(child.Name) then
+			processInventoryCleaning()
+		end
+	end)
+end
+
+setupBackpackListener(player:WaitForChild("Backpack"))
+
+player.CharacterAdded:Connect(function(newChar)
+	character = newChar
+	setupBackpackListener(player:WaitForChild("Backpack"))
+end)
+
+-- Кнопка Grab All (подбор без дерганья)
+grabAllButton.MouseButton1Click:Connect(function()
+	task.spawn(function()
+		local hrp = character:FindFirstChild("HumanoidRootPart")
+		if not hrp then return end
+
+		for _, obj in ipairs(Workspace:GetChildren()) do
+			if obj:IsA("Tool") and matchesTarget(obj.Name) then
+				local handle = obj:FindFirstChild("Handle")
+				if handle then
+					handle.CFrame = hrp.CFrame + Vector3.new(0, 0.5, 0)
+					task.wait(0.02)
+					obj.Parent = player.Backpack
+				end
+			end
+		end
+		
+		if autoDropEnabled then
+			processInventoryCleaning()
+		end
+	end)
+end)
