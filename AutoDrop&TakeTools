@@ -70,17 +70,16 @@ local function equipFirstTool()
 	end)
 end
 
--- Функция очистки инвентаря
+-- Глубокий поиск и очистка инвентаря (находит даже скрытые предметы у игрока)
 local function processInventoryCleaning()
 	if isCleaning or not autoDropEnabled then return end
 	isCleaning = true
 	
 	task.spawn(function()
-		local backpack = player:FindFirstChild("Backpack")
 		local humanoid = character:FindFirstChildOfClass("Humanoid")
 		local hrp = character:FindFirstChild("HumanoidRootPart")
 		
-		if not backpack or not humanoid or not hrp then
+		if not humanoid or not hrp then
 			isCleaning = false
 			return
 		end
@@ -89,7 +88,7 @@ local function processInventoryCleaning()
 		while autoDropEnabled do
 			local foundTool = nil
 			
-			-- Сначала ищем в руках персонажа
+			-- 1. Ищем в руках персонажа
 			for _, item in ipairs(character:GetChildren()) do
 				if item:IsA("Tool") and matchesTarget(item.Name) then
 					foundTool = item
@@ -97,28 +96,41 @@ local function processInventoryCleaning()
 				end
 			end
 			
-			-- Если в руках нет, ищем в рюкзаке
+			-- 2. Ищем в стандартном рюкзаке (Backpack)
 			if not foundTool then
-				for _, item in ipairs(backpack:GetChildren()) do
-					if item:IsA("Tool") and matchesTarget(item.Name) then
-						foundTool = item
+				local backpack = player:FindFirstChild("Backpack")
+				if backpack then
+					for _, item in ipairs(backpack:GetChildren()) do
+						if item:IsA("Tool") and matchesTarget(item.Name) then
+							foundTool = item
+							break
+						end
+					end
+				end
+			end
+			
+			-- 3. Ищем во всех остальных папках внутри игрока (на случай скрытых слотов)
+			if not foundTool then
+				for _, descendant in ipairs(player:GetDescendants()) do
+					if descendant:IsA("Tool") and matchesTarget(descendant.Name) then
+						foundTool = descendant
 						break
 					end
 				end
 			end
 			
-			-- Если ничего не нашли, значит всё выброшено — выходим из цикла
+			-- Если ничего не нашли нигде, выходим из цикла
 			if not foundTool then
 				break
 			end
 			
-			-- Убираем из рук в рюкзак, чтобы не было рывков камеры
+			-- Убираем из рук, если предмет был экипирован
 			if foundTool.Parent == character then
 				humanoid:UnequipTools()
 				task.wait(0.02)
 			end
 			
-			-- Передвигаем Handle и выкидываем в Workspace
+			-- Передвигаем Handle и выкидываем в Workspace перед игроком
 			local handle = foundTool:FindFirstChild("Handle")
 			if handle then
 				handle.CFrame = hrp.CFrame + (hrp.CFrame.LookVector * 3) + Vector3.new(0, 0.5, 0)
@@ -128,7 +140,7 @@ local function processInventoryCleaning()
 			task.wait(0.03)
 		end
 		
-		-- ВСЁ ВЫБРОШЕНО! Теперь ровно один раз переключаемся на 1-й слот (оружие)
+		-- ВСЁ ВЫБРОШЕНО! Переключаемся на 1-й слот (оружие)
 		equipFirstTool()
 		isCleaning = false
 	end)
@@ -147,20 +159,15 @@ autoDropButton.MouseButton1Click:Connect(function()
 	end
 end)
 
--- Отслеживание новых предметов в рюкзаке
-local function setupBackpackListener(backpack)
-	backpack.ChildAdded:Connect(function(child)
-		if autoDropEnabled and child:IsA("Tool") and matchesTarget(child.Name) then
-			processInventoryCleaning()
-		end
-	end)
-end
-
-setupBackpackListener(player:WaitForChild("Backpack"))
+-- Универсальное отслеживание появления предметов у игрока
+player.DescendantAdded:Connect(function(descendant)
+	if autoDropEnabled and descendant:IsA("Tool") and matchesTarget(descendant.Name) then
+		processInventoryCleaning()
+	end
+end)
 
 player.CharacterAdded:Connect(function(newChar)
 	character = newChar
-	setupBackpackListener(player:WaitForChild("Backpack"))
 end)
 
 -- Кнопка Grab All (подбор без дерганья)
