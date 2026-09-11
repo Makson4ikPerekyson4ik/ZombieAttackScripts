@@ -1,6 +1,8 @@
 -- Services
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
 
 local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
@@ -40,18 +42,17 @@ grabAllButton.Text = "Grab All Granade/Molotov"
 grabAllButton.Parent = screenGui
 
 local autoDropEnabled = false
-local isCleaning = false
 
 -- Функция проверки имени (ищем гранаты и молотовы)
 local function matchesTarget(name)
 	local lowerName = string.lower(name)
-	if string.find(lowerName, "granade") or string.find(lowerName, "grenade") or string.find(lowerName, "molotov") then
+	if string.find(lowerName, "granade") or string.find(lowerName, "grenade") or string.find(lowerName, "stun") or string.find(lowerName, "molotov") then
 		return true
 	end
 	return false
 end
 
--- Функция переключения на первый слот (оружие) в самом конце
+-- Функция переключения на первый слот (оружие)
 local function equipFirstTool()
 	task.defer(function()
 		local humanoid = character:FindFirstChildOfClass("Humanoid")
@@ -70,80 +71,24 @@ local function equipFirstTool()
 	end)
 end
 
--- Глубокий поиск и очистка инвентаря (находит даже скрытые предметы у игрока)
-local function processInventoryCleaning()
-	if isCleaning or not autoDropEnabled then return end
-	isCleaning = true
+-- Функция имитации нажатия Backspace для честного выброса предмета из рук
+local function pressBackspaceToDrop(tool)
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if not humanoid then return end
 	
-	task.spawn(function()
-		local humanoid = character:FindFirstChildOfClass("Humanoid")
-		local hrp = character:FindFirstChild("HumanoidRootPart")
-		
-		if not humanoid or not hrp then
-			isCleaning = false
-			return
-		end
-		
-		-- Выбрасываем всё по очереди, пока не закончатся целевые предметы
-		while autoDropEnabled do
-			local foundTool = nil
-			
-			-- 1. Ищем в руках персонажа
-			for _, item in ipairs(character:GetChildren()) do
-				if item:IsA("Tool") and matchesTarget(item.Name) then
-					foundTool = item
-					break
-				end
-			end
-			
-			-- 2. Ищем в стандартном рюкзаке (Backpack)
-			if not foundTool then
-				local backpack = player:FindFirstChild("Backpack")
-				if backpack then
-					for _, item in ipairs(backpack:GetChildren()) do
-						if item:IsA("Tool") and matchesTarget(item.Name) then
-							foundTool = item
-							break
-						end
-					end
-				end
-			end
-			
-			-- 3. Ищем во всех остальных папках внутри игрока (на случай скрытых слотов)
-			if not foundTool then
-				for _, descendant in ipairs(player:GetDescendants()) do
-					if descendant:IsA("Tool") and matchesTarget(descendant.Name) then
-						foundTool = descendant
-						break
-					end
-				end
-			end
-			
-			-- Если ничего не нашли нигде, выходим из цикла
-			if not foundTool then
-				break
-			end
-			
-			-- Убираем из рук, если предмет был экипирован
-			if foundTool.Parent == character then
-				humanoid:UnequipTools()
-				task.wait(0.02)
-			end
-			
-			-- Передвигаем Handle и выкидываем в Workspace перед игроком
-			local handle = foundTool:FindFirstChild("Handle")
-			if handle then
-				handle.CFrame = hrp.CFrame + (hrp.CFrame.LookVector * 3) + Vector3.new(0, 0.5, 0)
-			end
-			foundTool.Parent = Workspace
-			
-			task.wait(0.03)
-		end
-		
-		-- ВСЁ ВЫБРОШЕНО! Переключаемся на 1-й слот (оружие)
-		equipFirstTool()
-		isCleaning = false
-	end)
+	-- Достаем предмет в руки, если он в рюкзаке
+	if tool.Parent ~= character then
+		humanoid:EquipTool(tool)
+		task.wait(0.03)
+	end
+	
+	-- Проверяем, что предмет действительно в руках
+	if tool.Parent == character then
+		VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Backspace, false, game)
+		task.wait(0.01)
+		VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Backspace, false, game)
+		task.wait(0.03)
+	end
 end
 
 -- Переключатель кнопки Auto-Drop
@@ -152,25 +97,44 @@ autoDropButton.MouseButton1Click:Connect(function()
 	if autoDropEnabled then
 		autoDropButton.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
 		autoDropButton.Text = "Auto-Drop Granade/Molotov: ON"
-		processInventoryCleaning()
 	else
 		autoDropButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
 		autoDropButton.Text = "Auto-Drop Granade/Molotov: OFF"
 	end
 end)
 
--- Универсальное отслеживание появления предметов у игрока
-player.DescendantAdded:Connect(function(descendant)
-	if autoDropEnabled and descendant:IsA("Tool") and matchesTarget(descendant.Name) then
-		processInventoryCleaning()
+-- Стабильный мониторинг через Heartbeat
+RunService.Heartbeat:Connect(function()
+	if not autoDropEnabled then return end
+	
+	local backpack = player:FindFirstChild("Backpack")
+	if not backpack then return end
+	
+	local foundAnything = false
+	
+	-- Проверяем руки
+	for _, item in ipairs(character:GetChildren()) do
+		if item:IsA("Tool") and matchesTarget(item.Name) then
+			pressBackspaceToDrop(item)
+			foundAnything = true
+		end
+	end
+	
+	-- Проверяем рюкзак
+	for _, item in ipairs(backpack:GetChildren()) do
+		if item:IsA("Tool") and matchesTarget(item.Name) then
+			pressBackspaceToDrop(item)
+			foundAnything = true
+		end
+	end
+	
+	-- Если что-то скинули, сразу переключаем на оружие
+	if foundAnything then
+		equipFirstTool()
 	end
 end)
 
-player.CharacterAdded:Connect(function(newChar)
-	character = newChar
-end)
-
--- Кнопка Grab All (подбор без дерганья)
+-- Кнопка Grab All (подбор)
 grabAllButton.MouseButton1Click:Connect(function()
 	task.spawn(function()
 		local hrp = character:FindFirstChild("HumanoidRootPart")
@@ -180,15 +144,12 @@ grabAllButton.MouseButton1Click:Connect(function()
 			if obj:IsA("Tool") and matchesTarget(obj.Name) then
 				local handle = obj:FindFirstChild("Handle")
 				if handle then
-					handle.CFrame = hrp.CFrame + Vector3.new(0, 0.5, 0)
-					task.wait(0.02)
+					local grabPos = hrp.Position + Vector3.new(0, 0.5, 0)
+					handle.CFrame = CFrame.new(grabPos)
+					task.wait(0.01)
 					obj.Parent = player.Backpack
 				end
 			end
-		end
-		
-		if autoDropEnabled then
-			processInventoryCleaning()
 		end
 	end)
 end)
